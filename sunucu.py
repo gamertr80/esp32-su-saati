@@ -7,9 +7,9 @@ import time
 from datetime import datetime
 import threading
 
-# --- GEMINI API KEY AYARI ---
-# Render'a yüklediğinde API Key'ini buraya tırnak içine yazabilirsin
+# --- GEMINI & BLYNK AYARLARI ---
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6JAPddJXYE0HCQTQhAdNuN1PeyxPLru7Jt3eN5sXf-tvA")
+BLYNK_AUTH_TOKEN = "Ir_GGYSTnoWsfC43dv7JRW4-tC7ThGTU"
 
 app = Flask(__name__)
 
@@ -23,6 +23,18 @@ if not os.path.exists(CSV_FILE):
     with open(CSV_FILE, mode='w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow(['Tarih_Saat', 'Okunan_Endeks_m3', 'Dosya_Yolu'])
+
+def send_to_blynk(pin, value):
+    """Okunan veriyi Blynk Mobil Uygulamasına Gönderir"""
+    try:
+        url = f"https://blynk.cloud/external/api/update?token={BLYNK_AUTH_TOKEN}&{pin}={value}"
+        res = requests.get(url, timeout=10)
+        if res.status_code == 200:
+            print(f"[+] Blynk Güncellendi: {pin} -> {value}")
+        else:
+            print(f"[-] Blynk Güncelleme Hatası ({res.status_code}): {res.text}")
+    except Exception as e:
+        print(f"[-] Blynk Bağlantı Hatası: {e}")
 
 @app.route('/')
 def home():
@@ -70,9 +82,13 @@ def analyze_image_background(image_data, save_path):
                 print(f"📅 TARİH: {tarih_saat}")
                 print("==================================================\n")
 
+                # 1. CSV Kaydı
                 with open(CSV_FILE, mode='a', newline='', encoding='utf-8') as f:
                     writer = csv.writer(f)
                     writer.writerow([tarih_saat, okunan_deger, save_path])
+
+                # 2. Blynk Mobil Uygulamasına Gönder (V0 Pinine)
+                send_to_blynk("v0", okunan_deger)
                 break
             else:
                 print(f"[!] Gemini API Yanıt Hatası ({response.status_code}): {response.text}")
