@@ -3,7 +3,6 @@ from flask import Flask, request, jsonify, send_file
 import google.generativeai as genai
 from PIL import Image
 import io
-import blynklib # Blynk kütüphanenize göre düzenleyebilirsiniz
 
 app = Flask(__name__)
 
@@ -25,7 +24,7 @@ def upload_meter():
         if not image_bytes:
             return jsonify({"error": "Resim verisi alınamadı"}), 400
 
-        # 1. Çekilen son resmi dosyaya kaydet (Tarayıcıdan bakabilmek için)
+        # 1. Çekilen son resmi dosyaya kaydet
         with open(LAST_IMAGE_PATH, "wb") as f:
             f.write(image_bytes)
 
@@ -38,9 +37,6 @@ def upload_meter():
         meter_reading = response.text.strip()
 
         print(f"Okunan Sayaç Değeri: {meter_reading}")
-
-        # 3. Blynk Uygulamasına Veriyi Gönder (Opsiyonel)
-        # blynk.virtual_write(vpin, meter_reading)
 
         return jsonify({
             "status": "success",
@@ -57,7 +53,7 @@ def get_latest_image():
     if os.path.exists(LAST_IMAGE_PATH):
         return send_file(LAST_IMAGE_PATH, mimetype='image/jpeg')
     else:
-        return "Henüz yüklenmiş bir fotoğraf yok.", 444
+        return jsonify({"message": "Henüz yüklenmiş bir fotoğraf yok."}), 404
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
