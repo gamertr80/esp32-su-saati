@@ -1,4 +1,5 @@
 import os
+import requests
 from flask import Flask, request, jsonify, send_file
 import google.generativeai as genai
 from PIL import Image
@@ -6,13 +7,34 @@ import io
 
 app = Flask(__name__)
 
-# API Anahtarı Ayarı
+# API Anahtarları ve Ortam Değişkenleri
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip().strip('"').strip("'")
+BLYNK_AUTH_TOKEN = os.environ.get("BLYNK_AUTH_TOKEN", "").strip().strip('"').strip("'")
 
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
 LAST_IMAGE_PATH = "latest_meter.jpg"
+
+def send_to_blynk(value):
+    """Okunan veriyi Blynk V0 sanal pinine gönderir."""
+    if not BLYNK_AUTH_TOKEN:
+        print("UYARI: BLYNK_AUTH_TOKEN bulunamadi, Blynk guncellenmedi.")
+        return False
+
+    try:
+        # Blynk HTTP REST API endpoint (V0 pini için)
+        url = f"https://blynk.cloud/external/api/update?token={BLYNK_AUTH_TOKEN}&v0={value}"
+        res = requests.get(url, timeout=5)
+        if res.status_code == 200:
+            print(f"--- BLYNK GÜNCELLENDİ (V0: {value}) ---")
+            return True
+        else:
+            print(f"Blynk guncelleme hatasi: HTTP {res.status_code}")
+            return False
+    except Exception as err:
+        print(f"Blynk baglanti hatasi: {str(err)}")
+        return False
 
 @app.route('/')
 def home():
@@ -38,7 +60,6 @@ def upload_meter():
 
         prompt = "Bu bir su sayaci goruntusudur. Lutfen sadece siyah ve kirmizi carklardaki okunan sayisal indeksi yaz. Ekstra hicbir aciklama yapma, sadece sayilari don."
 
-        # 3. Güncel 3.x ve Flash Modelleri
         candidate_models = [
             'gemini-3.6-flash',
             'gemini-3.6-pro',
@@ -63,6 +84,10 @@ def upload_meter():
         if response and response.text:
             meter_reading = response.text.strip()
             print(f"--- OKUNAN SAYAÇ DEĞERİ ({used_model}): {meter_reading} ---")
+
+            # 3. Blynk Panosunu Güncelle
+            send_to_blynk(meter_reading)
+
             return jsonify({
                 "status": "success",
                 "reading": meter_reading,
