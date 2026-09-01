@@ -32,25 +32,60 @@ def upload_meter():
         if not GEMINI_API_KEY:
             return jsonify({"status": "partial_success", "message": "Resim kaydedildi ancak API Key eksik!"}), 200
 
-        # 2. Resmi PIL ile ac ve boyutunu/RAM yukunu optimize et
+        # 2. Görsel Boyutunu Optimize Et (RAM ve Timeout için)
         image = Image.open(io.BytesIO(image_bytes))
-        image.thumbnail((1024, 1024)) # RAM aşımını ve timeout'u engellemek için yeniden boyutlandırır
+        image.thumbnail((1024, 1024))
 
-        # 3. Gemini 1.5 Flash Modeli
-        model = genai.GenerativeModel('gemini-1.5-flash')
         prompt = "Bu bir su sayaci goruntusudur. Lutfen sadece siyah ve kirmizi carklardaki okunan sayisal indeksi yaz. Ekstra hicbir aciklama yapma, sadece sayilari don."
-        
-        response = model.generate_content([prompt, image])
-        
+
+        # 3. Sırasıyla denenacak güncel model isimleri
+        candidate_models = [
+            'gemini-1.5-flash-latest',
+            'gemini-2.5-flash',
+            'gemini-1.5-flash-001',
+            'gemini-1.5-flash-002',
+            'gemini-1.5-pro'
+        ]
+
+        response = None
+        used_model = None
+
+        for m_name in candidate_models:
+            try:
+                model = genai.GenerativeModel(m_name)
+                res = model.generate_content([prompt, image])
+                if res and res.text:
+                    response = res
+                    used_model = m_name
+                    break
+            except Exception as e:
+                print(f"{m_name} modeli denenirken hata: {str(e)}")
+                continue
+
+        # Eğer liste sonuncusu da başarsız olursa hesaptaki kullanılabilir ilk vision modelini dinamik seç
+        if not response:
+            try:
+                available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                for m_name in available_models:
+                    if 'flash' in m_name or 'pro' in m_name:
+                        model = genai.GenerativeModel(m_name)
+                        response = model.generate_content([prompt, image])
+                        if response and response.text:
+                            used_model = m_name
+                            break
+            except Exception as e:
+                print(f"Dinamik model listeleme hatasi: {str(e)}")
+
         if response and response.text:
             meter_reading = response.text.strip()
-            print(f"--- OKUNAN SAYAÇ DEĞERİ: {meter_reading} ---")
+            print(f"--- OKUNAN SAYAÇ DEĞERİ ({used_model}): {meter_reading} ---")
             return jsonify({
                 "status": "success",
-                "reading": meter_reading
+                "reading": meter_reading,
+                "model": used_model
             }), 200
         else:
-            return jsonify({"status": "error", "message": "AI yanit uretmedi"}), 200
+            return jsonify({"status": "error", "message": "Hiçbir Gemini modeli yanıt üretmedi."}), 500
 
     except Exception as e:
         print(f"Hata olustu: {str(e)}")
