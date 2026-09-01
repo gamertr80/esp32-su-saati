@@ -7,7 +7,7 @@ import io
 
 app = Flask(__name__)
 
-# API Anahtarları ve Ortam Değişkenleri
+# API Anahtarları
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip().strip('"').strip("'")
 BLYNK_AUTH_TOKEN = os.environ.get("BLYNK_AUTH_TOKEN", "").strip().strip('"').strip("'")
 
@@ -17,13 +17,12 @@ if GEMINI_API_KEY:
 LAST_IMAGE_PATH = "latest_meter.jpg"
 
 def send_to_blynk(value):
-    """Okunan veriyi Blynk V0 sanal pinine gönderir."""
+    """Okunan veriyi veya hatayı Blynk V0 sanal pinine gönderir."""
     if not BLYNK_AUTH_TOKEN:
-        print("UYARI: BLYNK_AUTH_TOKEN bulunamadi, Blynk guncellenmedi.")
+        print("UYARI: BLYNK_AUTH_TOKEN bulunamadi.")
         return False
 
     try:
-        # Blynk HTTP REST API endpoint (V0 pini için)
         url = f"https://blynk.cloud/external/api/update?token={BLYNK_AUTH_TOKEN}&v0={value}"
         res = requests.get(url, timeout=5)
         if res.status_code == 200:
@@ -45,6 +44,7 @@ def upload_meter():
     try:
         image_bytes = request.data
         if not image_bytes:
+            send_to_blynk("HATA: Resim Yok")
             return jsonify({"error": "Resim verisi alinamadi"}), 400
 
         # 1. Fotoğrafı diske kaydet
@@ -52,13 +52,14 @@ def upload_meter():
             f.write(image_bytes)
 
         if not GEMINI_API_KEY:
+            send_to_blynk("HATA: API Key Eksik")
             return jsonify({"status": "partial_success", "message": "Resim kaydedildi ancak API Key eksik!"}), 200
 
         # 2. Görsel Boyutunu Optimize Et
         image = Image.open(io.BytesIO(image_bytes))
         image.thumbnail((1024, 1024))
 
-        prompt = "Bu bir su sayaci goruntusudur. Lutfen sadece siyah ve kirmizi carklardaki okunan sayisal indeksi yaz. Ekstra hicbir aciklama yapma, sadece sayilari don."
+        prompt = "Bu bir su sayaci goruntusudur. Lutfen sadece siyah ve kirmizi carklardaki okunan sayisal indeksi yaz. Eger rakamlar net okunmuyorsa veya bulaniksa sadece 'OKUNAMADI' yaz. Ekstra hicbir aciklama yapma."
 
         candidate_models = [
             'gemini-3.6-flash',
@@ -85,7 +86,7 @@ def upload_meter():
             meter_reading = response.text.strip()
             print(f"--- OKUNAN SAYAÇ DEĞERİ ({used_model}): {meter_reading} ---")
 
-            # 3. Blynk Panosunu Güncelle
+            # Blynk'e Sayaç Değerini veya OKUNAMADI Uyarısını Gönder
             send_to_blynk(meter_reading)
 
             return jsonify({
@@ -94,10 +95,13 @@ def upload_meter():
                 "model": used_model
             }), 200
         else:
+            # AI Yanıt Vermezse Blynk'e Bildir
+            send_to_blynk("HATA: AI Yanit Vermedi")
             return jsonify({"status": "error", "message": "Hiçbir Gemini modeli yanıt üretmedi."}), 500
 
     except Exception as e:
         print(f"Hata olustu: {str(e)}")
+        send_to_blynk("HATA: Sunucu Hatasi")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/latest-image', methods=['GET'])
