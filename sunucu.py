@@ -32,19 +32,17 @@ def upload_meter():
         if not GEMINI_API_KEY:
             return jsonify({"status": "partial_success", "message": "Resim kaydedildi ancak API Key eksik!"}), 200
 
-        # 2. Görsel Boyutunu Optimize Et (RAM ve Timeout için)
+        # 2. Görsel Boyutunu Optimize Et
         image = Image.open(io.BytesIO(image_bytes))
         image.thumbnail((1024, 1024))
 
         prompt = "Bu bir su sayaci goruntusudur. Lutfen sadece siyah ve kirmizi carklardaki okunan sayisal indeksi yaz. Ekstra hicbir aciklama yapma, sadece sayilari don."
 
-        # 3. Sırasıyla denenacak güncel model isimleri
+        # 3. Güncel 3.x ve Flash Modelleri
         candidate_models = [
-            'gemini-1.5-flash-latest',
-            'gemini-2.5-flash',
-            'gemini-1.5-flash-001',
-            'gemini-1.5-flash-002',
-            'gemini-1.5-pro'
+            'gemini-3.6-flash',
+            'gemini-3.6-pro',
+            'gemini-2.5-flash-latest'
         ]
 
         response = None
@@ -61,20 +59,6 @@ def upload_meter():
             except Exception as e:
                 print(f"{m_name} modeli denenirken hata: {str(e)}")
                 continue
-
-        # Eğer liste sonuncusu da başarsız olursa hesaptaki kullanılabilir ilk vision modelini dinamik seç
-        if not response:
-            try:
-                available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                for m_name in available_models:
-                    if 'flash' in m_name or 'pro' in m_name:
-                        model = genai.GenerativeModel(m_name)
-                        response = model.generate_content([prompt, image])
-                        if response and response.text:
-                            used_model = m_name
-                            break
-            except Exception as e:
-                print(f"Dinamik model listeleme hatasi: {str(e)}")
 
         if response and response.text:
             meter_reading = response.text.strip()
