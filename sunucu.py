@@ -16,17 +16,17 @@ if GEMINI_API_KEY:
 
 LAST_IMAGE_PATH = "latest_meter.jpg"
 
-def send_to_blynk(value):
-    """Okunan veriyi veya hatayı Blynk V0 sanal pinine gönderir."""
+def send_to_blynk(pin, value):
+    """Verilen Blynk sanal pinine (V0, V1 vb.) veri gönderir."""
     if not BLYNK_AUTH_TOKEN:
         print("UYARI: BLYNK_AUTH_TOKEN bulunamadi.")
         return False
 
     try:
-        url = f"https://blynk.cloud/external/api/update?token={BLYNK_AUTH_TOKEN}&v0={value}"
+        url = f"https://blynk.cloud/external/api/update?token={BLYNK_AUTH_TOKEN}&{pin}={value}"
         res = requests.get(url, timeout=5)
         if res.status_code == 200:
-            print(f"--- BLYNK GÜNCELLENDİ (V0: {value}) ---")
+            print(f"--- BLYNK GÜNCELLENDİ ({pin}: {value}) ---")
             return True
         else:
             print(f"Blynk guncelleme hatasi: HTTP {res.status_code}")
@@ -42,9 +42,15 @@ def home():
 @app.route('/upload-meter', methods=['POST'])
 def upload_meter():
     try:
+        # ESP32'den gelen pil parametresini al
+        battery_level = request.args.get('battery', 'N/A')
+        if battery_level != 'N/A':
+            print(f"--- GELEN PİL YÜZDESİ: %{battery_level} ---")
+            send_to_blynk("v1", f"%{battery_level}")  # Blynk V1 Pinine Gönder
+
         image_bytes = request.data
         if not image_bytes:
-            send_to_blynk("HATA: Resim Yok")
+            send_to_blynk("v0", "HATA: Resim Yok")
             return jsonify({"error": "Resim verisi alinamadi"}), 400
 
         # 1. Fotoğrafı diske kaydet
@@ -52,7 +58,7 @@ def upload_meter():
             f.write(image_bytes)
 
         if not GEMINI_API_KEY:
-            send_to_blynk("HATA: API Key Eksik")
+            send_to_blynk("v0", "HATA: API Key Eksik")
             return jsonify({"status": "partial_success", "message": "Resim kaydedildi ancak API Key eksik!"}), 200
 
         # 2. Görseli Yükle
@@ -66,7 +72,6 @@ def upload_meter():
             "Eğer sayaç paneli tamamen karanlıksa veya hiçbir rakam seçilemeyecek kadar bozuksa sadece OKUNAMADI yaz."
         )
 
-        # API uyarısına göre güncellenen model isimleri
         candidate_models = [
             'gemini-3.6-flash',
             'gemini-3.1-pro-preview'
@@ -91,20 +96,21 @@ def upload_meter():
             meter_reading = response.text.strip()
             print(f"--- OKUNAN SAYAÇ DEĞERİ ({used_model}): {meter_reading} ---")
 
-            send_to_blynk(meter_reading)
+            send_to_blynk("v0", meter_reading)  # Blynk V0 Pinine Sayaç Değerini Gönder
 
             return jsonify({
                 "status": "success",
                 "reading": meter_reading,
+                "battery": battery_level,
                 "model": used_model
             }), 200
         else:
-            send_to_blynk("HATA: AI Yanit Vermedi")
+            send_to_blynk("v0", "HATA: AI Yanit Vermedi")
             return jsonify({"status": "error", "message": "Hiçbir Gemini modeli yanıt üretmedi."}), 500
 
     except Exception as e:
         print(f"Hata olustu: {str(e)}")
-        send_to_blynk("HATA: Sunucu Hatasi")
+        send_to_blynk("v0", "HATA: Sunucu Hatasi")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/latest-image', methods=['GET'])
