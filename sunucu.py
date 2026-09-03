@@ -55,16 +55,22 @@ def upload_meter():
             send_to_blynk("HATA: API Key Eksik")
             return jsonify({"status": "partial_success", "message": "Resim kaydedildi ancak API Key eksik!"}), 200
 
-        # 2. Görsel Boyutunu Optimize Et
+        # 2. Görseli Yükle
         image = Image.open(io.BytesIO(image_bytes))
-        image.thumbnail((1024, 1024))
 
-        prompt = "Bu bir su sayaci goruntusudur. Lutfen sadece siyah ve kirmizi carklardaki okunan sayisal indeksi yaz. Eger rakamlar net okunmuyorsa veya bulaniksa sadece 'OKUNAMADI' yaz. Ekstra hicbir aciklama yapma."
+        # Daha esnek ve tutarlı prompt
+        prompt = (
+            "Görseldeki su sayacının göstergesini incele. "
+            "Siyah ve kırmızı çarklardaki rakamları sırasıyla yan yana yaz (Örn: 00123.45 veya 1234). "
+            "Sadece ve sadece rakamları (ve varsa noktayı) çıktı olarak ver. "
+            "Hiçbir açıklama, kelime, harf veya 'm3' gibi bir birim ekleme. "
+            "Eğer sayaç paneli tamamen karanlıksa veya hiçbir rakam seçilemeyecek kadar bozuksa sadece OKUNAMADI yaz."
+        )
 
+        # Geçerli Gemini modelleri
         candidate_models = [
-            'gemini-3.6-flash',
-            'gemini-3.6-pro',
-            'gemini-2.5-flash-latest'
+            'gemini-2.5-flash',
+            'gemini-2.5-pro'
         ]
 
         response = None
@@ -86,7 +92,6 @@ def upload_meter():
             meter_reading = response.text.strip()
             print(f"--- OKUNAN SAYAÇ DEĞERİ ({used_model}): {meter_reading} ---")
 
-            # Blynk'e Sayaç Değerini veya OKUNAMADI Uyarısını Gönder
             send_to_blynk(meter_reading)
 
             return jsonify({
@@ -95,7 +100,6 @@ def upload_meter():
                 "model": used_model
             }), 200
         else:
-            # AI Yanıt Vermezse Blynk'e Bildir
             send_to_blynk("HATA: AI Yanit Vermedi")
             return jsonify({"status": "error", "message": "Hiçbir Gemini modeli yanıt üretmedi."}), 500
 
