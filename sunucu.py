@@ -58,7 +58,6 @@ def upload_meter():
         # 2. Görseli Yükle
         image = Image.open(io.BytesIO(image_bytes))
 
-        # Daha esnek ve tutarlı prompt
         prompt = (
             "Görseldeki su sayacının göstergesini incele. "
             "Siyah ve kırmızı çarklardaki rakamları sırasıyla yan yana yaz (Örn: 00123.45 veya 1234). "
@@ -67,10 +66,10 @@ def upload_meter():
             "Eğer sayaç paneli tamamen karanlıksa veya hiçbir rakam seçilemeyecek kadar bozuksa sadece OKUNAMADI yaz."
         )
 
-        # Geçerli Gemini modelleri
+        # API uyarısına göre güncellenen model isimleri
         candidate_models = [
-            'gemini-2.5-flash',
-            'gemini-2.5-pro'
+            'gemini-3.6-flash',
+            'gemini-3.1-pro-preview'
         ]
 
         response = None
