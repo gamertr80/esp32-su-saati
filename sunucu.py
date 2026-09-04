@@ -35,10 +35,10 @@ BLYNK_AUTH_TOKEN = os.getenv(
 
 
 # =====================================================
-# GEMINI MODEL
+# GEMINI MODEL (Görsel okuma için güncel model)
 # =====================================================
 
-GEMINI_MODEL = "gemini-3.5-flash-lite"
+GEMINI_MODEL = "gemini-2.5-flash"
 
 GEMINI_URL = (
     "https://generativelanguage.googleapis.com/"
@@ -49,7 +49,7 @@ GEMINI_URL = (
 
 
 # =====================================================
-# DOSYA
+# DOSYA & DEĞİŞKENLER
 # =====================================================
 
 LAST_IMAGE_PATH = "latest_meter.jpg"
@@ -91,7 +91,7 @@ print("")
 
 
 # =====================================================
-# BLYNK
+# BLYNK INTEGRATION
 # =====================================================
 
 def send_to_blynk(pin, value):
@@ -241,7 +241,7 @@ def receive_logs():
 
 
 # =====================================================
-# GEMINI API
+# GEMINI API CALL
 # =====================================================
 
 def ask_gemini(image_bytes):
@@ -253,20 +253,12 @@ def ask_gemini(image_bytes):
             "Environment Variables icinde yok."
         )
 
-
-    # -------------------------------------------------
-    # BASE64
-    # -------------------------------------------------
-
+    # Base64 dönüşümü
     image_base64 = base64.b64encode(
         image_bytes
     ).decode("utf-8")
 
-
-    # -------------------------------------------------
-    # PROMPT
-    # -------------------------------------------------
-
+    # Prompt
     prompt = """
 Bu fotograf bir su sayacinin fotografidir.
 
@@ -302,11 +294,6 @@ yaz.
 
 SADECE SAYI VEYA OKUNAMADI.
 """.strip()
-
-
-    # -------------------------------------------------
-    # REQUEST
-    # -------------------------------------------------
 
     payload = {
 
@@ -348,7 +335,6 @@ SADECE SAYI VEYA OKUNAMADI.
 
     }
 
-
     headers = {
 
         "Content-Type":
@@ -358,7 +344,6 @@ SADECE SAYI VEYA OKUNAMADI.
             GEMINI_API_KEY
 
     }
-
 
     print("")
     print(
@@ -375,11 +360,6 @@ SADECE SAYI VEYA OKUNAMADI.
         len(image_bytes),
         "byte"
     )
-
-
-    # -------------------------------------------------
-    # REQUEST
-    # -------------------------------------------------
 
     try:
 
@@ -409,20 +389,10 @@ SADECE SAYI VEYA OKUNAMADI.
             + repr(e)
         )
 
-
-    # -------------------------------------------------
-    # HTTP STATUS
-    # -------------------------------------------------
-
     print(
         "Gemini HTTP:",
         response.status_code
     )
-
-
-    # -------------------------------------------------
-    # RESPONSE BODY
-    # -------------------------------------------------
 
     response_text = response.text
 
@@ -430,11 +400,6 @@ SADECE SAYI VEYA OKUNAMADI.
         "Gemini cevabi:",
         response_text[:2000]
     )
-
-
-    # -------------------------------------------------
-    # API ERROR
-    # -------------------------------------------------
 
     if response.status_code != 200:
 
@@ -447,11 +412,6 @@ SADECE SAYI VEYA OKUNAMADI.
 
         )
 
-
-    # -------------------------------------------------
-    # JSON
-    # -------------------------------------------------
-
     try:
 
         data = response.json()
@@ -463,15 +423,9 @@ SADECE SAYI VEYA OKUNAMADI.
             + repr(e)
         )
 
-
-    # -------------------------------------------------
-    # CANDIDATE
-    # -------------------------------------------------
-
     candidates = data.get(
         "candidates"
     )
-
 
     if not candidates:
 
@@ -480,15 +434,9 @@ SADECE SAYI VEYA OKUNAMADI.
             + str(data)[:1500]
         )
 
-
-    # -------------------------------------------------
-    # CONTENT
-    # -------------------------------------------------
-
     content = candidates[0].get(
         "content"
     )
-
 
     if not content:
 
@@ -497,16 +445,10 @@ SADECE SAYI VEYA OKUNAMADI.
             + str(data)[:1500]
         )
 
-
     parts = content.get(
         "parts",
         []
     )
-
-
-    # -------------------------------------------------
-    # TEXT
-    # -------------------------------------------------
 
     result_text = ""
 
@@ -516,9 +458,7 @@ SADECE SAYI VEYA OKUNAMADI.
 
             result_text += part["text"]
 
-
     result_text = result_text.strip()
-
 
     if not result_text:
 
@@ -527,18 +467,16 @@ SADECE SAYI VEYA OKUNAMADI.
             "text bulunamadi."
         )
 
-
     print(
         "Gemini ham sonuc:",
         repr(result_text)
     )
 
-
     return result_text
 
 
 # =====================================================
-# SAYAÇ SONUCUNU TEMIZLE
+# SAYAÇ SONUCUNU TEMİZLE
 # =====================================================
 
 def clean_meter_result(text):
@@ -547,22 +485,11 @@ def clean_meter_result(text):
 
         return None
 
-
     text = text.strip()
-
-
-    # -------------------------------------------------
-    # OKUNAMADI
-    # -------------------------------------------------
 
     if "OKUNAMADI" in text.upper():
 
         return "OKUNAMADI"
-
-
-    # -------------------------------------------------
-    # MARKDOWN TEMIZLE
-    # -------------------------------------------------
 
     text = text.replace(
         "```",
@@ -571,15 +498,9 @@ def clean_meter_result(text):
 
     text = text.strip()
 
-
-    # -------------------------------------------------
-    # SAYI
-    # -------------------------------------------------
-
     result = ""
 
     decimal_found = False
-
 
     for char in text:
 
@@ -595,11 +516,9 @@ def clean_meter_result(text):
 
                 decimal_found = True
 
-
     if not result:
 
         return None
-
 
     return result
 
@@ -617,7 +536,6 @@ def upload_meter():
     global LAST_IMAGE_HASH
     global LAST_READING_VALUE
 
-
     print("")
     print(
         "===================================="
@@ -631,17 +549,11 @@ def upload_meter():
         "===================================="
     )
 
-
     try:
-
-        # =================================================
-        # IMAGE BYTES
-        # =================================================
 
         image_bytes = request.get_data(
             cache=False
         )
-
 
         if not image_bytes:
 
@@ -667,18 +579,13 @@ def upload_meter():
 
             }), 400
 
-
         print(
             "Fotograf:",
             len(image_bytes),
             "byte"
         )
 
-
-        # =================================================
-        # IMAGE VALIDATION
-        # =================================================
-
+        # JPEG Doğrulama
         try:
 
             image = Image.open(
@@ -716,26 +623,17 @@ def upload_meter():
 
             }), 400
 
-
-        # =================================================
-        # HASH
-        # =================================================
-
+        # Hash kontrolü
         current_hash = hashlib.md5(
             image_bytes
         ).hexdigest()
-
 
         print(
             "Image hash:",
             current_hash
         )
 
-
-        # =================================================
-        # SAVE
-        # =================================================
-
+        # Resmi kaydet
         try:
 
             with open(
@@ -758,11 +656,7 @@ def upload_meter():
                 repr(e)
             )
 
-
-        # =================================================
-        # SAME IMAGE
-        # =================================================
-
+        # Birebir aynı resim geldiyse Gemini çağrısı yapma
         if (
 
             current_hash ==
@@ -783,12 +677,10 @@ def upload_meter():
                 "Gemini cagrisi atlanacak."
             )
 
-
             send_to_blynk(
                 "v0",
                 LAST_READING_VALUE
             )
-
 
             return jsonify({
 
@@ -800,11 +692,7 @@ def upload_meter():
 
             }), 200
 
-
-        # =================================================
-        # API KEY
-        # =================================================
-
+        # API Key kontrolü
         if not GEMINI_API_KEY:
 
             print(
@@ -829,11 +717,7 @@ def upload_meter():
 
             }), 500
 
-
-        # =================================================
-        # GEMINI
-        # =================================================
-
+        # Gemini İsteği
         try:
 
             raw_result = ask_gemini(
@@ -843,7 +727,6 @@ def upload_meter():
         except Exception as e:
 
             error_text = repr(e)
-
 
             print("")
             print(
@@ -863,17 +746,10 @@ def upload_meter():
             )
             print("")
 
-
             send_to_blynk(
                 "v0",
                 "HATA: Gemini"
             )
-
-
-            # -------------------------------------------------
-            # 502 yerine Gemini'nin gerçek HTTP kodunu
-            # mümkün olduğunca ESP32'ye bildiriyoruz.
-            # -------------------------------------------------
 
             return jsonify({
 
@@ -891,25 +767,15 @@ def upload_meter():
 
             }), 502
 
-
-        # =================================================
-        # CLEAN RESULT
-        # =================================================
-
+        # Sonuç Temizleme
         meter_reading = clean_meter_result(
             raw_result
         )
-
 
         print(
             "Temiz sonuc:",
             repr(meter_reading)
         )
-
-
-        # =================================================
-        # UNREADABLE
-        # =================================================
 
         if meter_reading == "OKUNAMADI":
 
@@ -917,12 +783,10 @@ def upload_meter():
 
             LAST_READING_VALUE = "OKUNAMADI"
 
-
             send_to_blynk(
                 "v0",
                 "OKUNAMADI"
             )
-
 
             return jsonify({
 
@@ -937,18 +801,12 @@ def upload_meter():
 
             }), 200
 
-
-        # =================================================
-        # INVALID RESULT
-        # =================================================
-
         if not meter_reading:
 
             send_to_blynk(
                 "v0",
                 "HATA: AI Sonucu"
             )
-
 
             return jsonify({
 
@@ -967,19 +825,10 @@ def upload_meter():
 
             }), 422
 
-
-        # =================================================
-        # SAVE RESULT
-        # =================================================
-
+        # Başarılı Okuma Kaydı
         LAST_IMAGE_HASH = current_hash
 
         LAST_READING_VALUE = meter_reading
-
-
-        # =================================================
-        # BLYNK
-        # =================================================
 
         blynk_ok = send_to_blynk(
 
@@ -988,11 +837,6 @@ def upload_meter():
             meter_reading
 
         )
-
-
-        # =================================================
-        # SUCCESS
-        # =================================================
 
         print("")
         print(
@@ -1019,7 +863,6 @@ def upload_meter():
 
         print("")
 
-
         return jsonify({
 
             "status":
@@ -1036,15 +879,9 @@ def upload_meter():
 
         }), 200
 
-
-    # =====================================================
-    # GENERAL ERROR
-    # =====================================================
-
     except Exception as e:
 
         error_text = repr(e)
-
 
         print("")
         print(
@@ -1064,7 +901,6 @@ def upload_meter():
         )
         print("")
 
-
         return jsonify({
 
             "status":
@@ -1083,7 +919,7 @@ def upload_meter():
 
 
 # =====================================================
-# LATEST IMAGE
+# LATEST IMAGE ENDPOINT
 # =====================================================
 
 @app.route(
@@ -1104,7 +940,6 @@ def latest_image():
 
         )
 
-
     return jsonify({
 
         "status":
@@ -1117,7 +952,7 @@ def latest_image():
 
 
 # =====================================================
-# 413
+# 413 ERROR HANDLER
 # =====================================================
 
 @app.errorhandler(413)
@@ -1138,7 +973,7 @@ def too_large(error):
 
 
 # =====================================================
-# START
+# APP START
 # =====================================================
 
 if __name__ == "__main__":
@@ -1150,7 +985,6 @@ if __name__ == "__main__":
         )
     )
 
-
     app.run(
 
         host="0.0.0.0",
@@ -1158,4 +992,3 @@ if __name__ == "__main__":
         port=port
 
     )
-````
