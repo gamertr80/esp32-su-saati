@@ -78,8 +78,7 @@ def upload_meter():
         )
 
         candidate_models = [
-            'gemini-3.6-flash',
-            'gemini-3.1-pro-preview'
+            'gemini-3.6-flash'
         ]
 
         response = None
