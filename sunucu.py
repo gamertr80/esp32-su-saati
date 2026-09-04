@@ -1,4 +1,5 @@
 import os
+import hashlib
 import requests
 from flask import Flask, request, jsonify, send_file
 import google.generativeai as genai
@@ -16,18 +17,18 @@ if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
 LAST_IMAGE_PATH = "latest_meter.jpg"
+LAST_IMAGE_HASH = None
+LAST_READING_VALUE = "Henüz Okunamadı"
 
 def send_to_blynk(pin, value):
-    """Verilen Blynk sanal pinine (v0, v1 vb.) güvenli şekilde veri gönderir."""
+    """Verilen Blynk sanal pinine (v0 vb.) veri gönderir."""
     if not BLYNK_AUTH_TOKEN:
         print("UYARI: BLYNK_AUTH_TOKEN bulunamadi.")
         return False
 
     try:
-        # URL'deki özel karakterlerin (boşluk, özel semboller) HTTP 400 vermesini önlemek için quote kullanıyoruz
         encoded_val = urllib.parse.quote(str(value))
         url = f"https://blynk.cloud/external/api/update?token={BLYNK_AUTH_TOKEN}&{pin}={encoded_val}"
-        
         res = requests.get(url, timeout=5)
         if res.status_code == 200:
             print(f"--- BLYNK GÜNCELLENDİ ({pin}: {value}) ---")
@@ -43,22 +44,43 @@ def send_to_blynk(pin, value):
 def home():
     return "ESP32-CAM AI Su Saati Sunucusu Bulutta Çalışıyor!"
 
+# =====================================================
+# ESP32 LOG TOPLAMA UÇ NOKTASI (EKNLENDİ)
+# =====================================================
+@app.route('/logs', methods=['POST'])
+def receive_logs():
+    try:
+        logs = request.data.decode('utf-8')
+        print("\n===== ESP32-CAM CANLI LOGLARI =====")
+        print(logs)
+        print("===================================\n")
+        return jsonify({"status": "success"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
 @app.route('/upload-meter', methods=['POST'])
 def upload_meter():
-    try:
-        # 1. ESP32'den gelen pil parametresini al (% sembolü olmadan ham sayı gönderiyoruz)
-        battery_level = request.args.get('battery', 'N/A')
-        if battery_level != 'N/A':
-            print(f"--- GELEN PİL YÜZDESİ: %{battery_level} ---")
-            # % işaretini kaldırıp sadece sayı değerini v1 pinine gönderiyoruz (HTTP 400'ü engeller)
-            send_to_blynk("v1", battery_level)
+    global LAST_IMAGE_HASH, LAST_READING_VALUE
 
+    try:
         image_bytes = request.data
         if not image_bytes:
             send_to_blynk("v0", "HATA: Resim Yok")
             return jsonify({"error": "Resim verisi alinamadi"}), 400
 
-        # 2. Fotoğrafı diske kaydet
+        # KOTA KORUMASI: Görsel Hash Kontrolü
+        # Görsel bir öncekiyle aynıysa Gemini API çağrılmaz.
+        current_hash = hashlib.md5(image_bytes).hexdigest()
+        if current_hash == LAST_IMAGE_HASH and LAST_READING_VALUE != "Henüz Okunamadı":
+            print("--- AYNI RESİM ALGILANDI: Gemini API çağrısı atlanarak önceki değer kullanılıyor ---")
+            send_to_blynk("v0", LAST_READING_VALUE)
+            return jsonify({
+                "status": "cached_success",
+                "reading": LAST_READING_VALUE,
+                "message": "Görsel değişmediği için kota harcanmadı."
+            }), 200
+
+        # Fotoğrafı kaydet
         with open(LAST_IMAGE_PATH, "wb") as f:
             f.write(image_bytes)
 
@@ -66,7 +88,6 @@ def upload_meter():
             send_to_blynk("v0", "HATA: API Key Eksik")
             return jsonify({"status": "partial_success", "message": "Resim kaydedildi ancak API Key eksik!"}), 200
 
-        # 3. Görseli Yükle ve Analiz Et
         image = Image.open(io.BytesIO(image_bytes))
 
         prompt = (
@@ -78,7 +99,7 @@ def upload_meter():
         )
 
         candidate_models = [
-            'gemini-3.6-flash'
+            'gemini-2.5-flash'
         ]
 
         response = None
@@ -100,17 +121,19 @@ def upload_meter():
             meter_reading = response.text.strip()
             print(f"--- OKUNAN SAYAÇ DEĞERİ ({used_model}): {meter_reading} ---")
 
-            send_to_blynk("v0", meter_reading)  # Blynk V0 Pinine Sayaç Değerini Gönder
+            LAST_IMAGE_HASH = current_hash
+            LAST_READING_VALUE = meter_reading
+
+            send_to_blynk("v0", meter_reading)
 
             return jsonify({
                 "status": "success",
                 "reading": meter_reading,
-                "battery": battery_level,
                 "model": used_model
             }), 200
         else:
             send_to_blynk("v0", "HATA: AI Yanit Vermedi")
-            return jsonify({"status": "error", "message": "Hiçbir Gemini modeli yanıt üretmedi."}), 500
+            return jsonify({"status": "error", "message": "Gemini modeli yanıt üretmedi."}), 500
 
     except Exception as e:
         print(f"Hata olustu: {str(e)}")
