@@ -45,7 +45,7 @@ def home():
     return "ESP32-CAM AI Su Saati Sunucusu Bulutta Çalışıyor!"
 
 # =====================================================
-# ESP32 LOG TOPLAMA UÇ NOKTASI (EKNLENDİ)
+# ESP32 LOG TOPLAMA UÇ NOKTASI
 # =====================================================
 @app.route('/logs', methods=['POST'])
 def receive_logs():
@@ -69,7 +69,6 @@ def upload_meter():
             return jsonify({"error": "Resim verisi alinamadi"}), 400
 
         # KOTA KORUMASI: Görsel Hash Kontrolü
-        # Görsel bir öncekiyle aynıysa Gemini API çağrılmaz.
         current_hash = hashlib.md5(image_bytes).hexdigest()
         if current_hash == LAST_IMAGE_HASH and LAST_READING_VALUE != "Henüz Okunamadı":
             print("--- AYNI RESİM ALGILANDI: Gemini API çağrısı atlanarak önceki değer kullanılıyor ---")
@@ -80,7 +79,7 @@ def upload_meter():
                 "message": "Görsel değişmediği için kota harcanmadı."
             }), 200
 
-        # Fotoğrafı kaydet
+        # Fotoğrafı diske kaydet
         with open(LAST_IMAGE_PATH, "wb") as f:
             f.write(image_bytes)
 
@@ -88,7 +87,8 @@ def upload_meter():
             send_to_blynk("v0", "HATA: API Key Eksik")
             return jsonify({"status": "partial_success", "message": "Resim kaydedildi ancak API Key eksik!"}), 200
 
-        image = Image.open(io.BytesIO(image_bytes))
+        # PIL görsel açma hatasını engellemek için kaydedilen dosyadan güvenle açıyoruz
+        image = Image.open(LAST_IMAGE_PATH)
 
         prompt = (
             "Görseldeki su sayacının göstergesini incele. "
@@ -98,8 +98,10 @@ def upload_meter():
             "Eğer sayaç paneli tamamen karanlıksa veya hiçbir rakam seçilemeyecek kadar bozuksa sadece OKUNAMADI yaz."
         )
 
+        # Doğrudan aktif ve kotaları uyumlu resmi modeller
         candidate_models = [
-            'gemini-2.5-flash'
+            'gemini-1.5-flash',
+            'gemini-1.5-pro'
         ]
 
         response = None
