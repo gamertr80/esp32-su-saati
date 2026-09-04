@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify, send_file
 import google.generativeai as genai
 from PIL import Image
 import io
+import urllib.parse
 
 app = Flask(__name__)
 
@@ -17,13 +18,16 @@ if GEMINI_API_KEY:
 LAST_IMAGE_PATH = "latest_meter.jpg"
 
 def send_to_blynk(pin, value):
-    """Verilen Blynk sanal pinine (V0, V1 vb.) veri gönderir."""
+    """Verilen Blynk sanal pinine (v0, v1 vb.) güvenli şekilde veri gönderir."""
     if not BLYNK_AUTH_TOKEN:
         print("UYARI: BLYNK_AUTH_TOKEN bulunamadi.")
         return False
 
     try:
-        url = f"https://blynk.cloud/external/api/update?token={BLYNK_AUTH_TOKEN}&{pin}={value}"
+        # URL'deki özel karakterlerin (boşluk, özel semboller) HTTP 400 vermesini önlemek için quote kullanıyoruz
+        encoded_val = urllib.parse.quote(str(value))
+        url = f"https://blynk.cloud/external/api/update?token={BLYNK_AUTH_TOKEN}&{pin}={encoded_val}"
+        
         res = requests.get(url, timeout=5)
         if res.status_code == 200:
             print(f"--- BLYNK GÜNCELLENDİ ({pin}: {value}) ---")
@@ -42,18 +46,19 @@ def home():
 @app.route('/upload-meter', methods=['POST'])
 def upload_meter():
     try:
-        # ESP32'den gelen pil parametresini al
+        # 1. ESP32'den gelen pil parametresini al (% sembolü olmadan ham sayı gönderiyoruz)
         battery_level = request.args.get('battery', 'N/A')
         if battery_level != 'N/A':
             print(f"--- GELEN PİL YÜZDESİ: %{battery_level} ---")
-            send_to_blynk("v1", f"%{battery_level}")  # Blynk V1 Pinine Gönder
+            # % işaretini kaldırıp sadece sayı değerini v1 pinine gönderiyoruz (HTTP 400'ü engeller)
+            send_to_blynk("v1", battery_level)
 
         image_bytes = request.data
         if not image_bytes:
             send_to_blynk("v0", "HATA: Resim Yok")
             return jsonify({"error": "Resim verisi alinamadi"}), 400
 
-        # 1. Fotoğrafı diske kaydet
+        # 2. Fotoğrafı diske kaydet
         with open(LAST_IMAGE_PATH, "wb") as f:
             f.write(image_bytes)
 
@@ -61,7 +66,7 @@ def upload_meter():
             send_to_blynk("v0", "HATA: API Key Eksik")
             return jsonify({"status": "partial_success", "message": "Resim kaydedildi ancak API Key eksik!"}), 200
 
-        # 2. Görseli Yükle
+        # 3. Görseli Yükle ve Analiz Et
         image = Image.open(io.BytesIO(image_bytes))
 
         prompt = (
