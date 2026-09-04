@@ -35,10 +35,10 @@ BLYNK_AUTH_TOKEN = os.getenv(
 
 
 # =====================================================
-# GEMINI MODEL (Görsel okuma için güncel model)
+# GEMINI MODEL (En güncel hızlı model)
 # =====================================================
 
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.6-flash"
 
 GEMINI_URL = (
     "https://generativelanguage.googleapis.com/"
@@ -46,7 +46,6 @@ GEMINI_URL = (
     + GEMINI_MODEL
     + ":generateContent"
 )
-
 
 # =====================================================
 # DOSYA & DEĞİŞKENLER
